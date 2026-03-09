@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useInterface } from './InterfaceContext';
 
 const links = [
   { href: '/', label: 'Dashboard', icon: '📊' },
@@ -12,6 +13,7 @@ const links = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { mode, toggleMode } = useInterface();
 
   return (
     <aside style={{
@@ -54,6 +56,24 @@ export default function Sidebar() {
           </Link>
         ))}
       </nav>
+
+      {/* Toggle Interface Mode */}
+      <div style={{ padding: '0 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <p style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Interface Mode</p>
+        <button 
+          onClick={toggleMode}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: 'var(--bg-primary)', border: '1px solid var(--border)',
+            padding: '8px 12px', borderRadius: '8px', cursor: 'pointer',
+            color: 'var(--text-primary)', fontSize: '0.8rem', fontWeight: 600,
+            transition: 'all 0.2s',
+          }}
+        >
+          <span>{mode === 'expert' ? '👨‍💻 Expert Console' : '📊 Simple Metrics'}</span>
+          <span style={{ color: 'var(--accent-cyan)' }}>⮂</span>
+        </button>
+      </div>
 
       {/* Status */}
       <div style={{

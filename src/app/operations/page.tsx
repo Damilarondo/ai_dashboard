@@ -1,14 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { fetchConfig, updateConfig, injectTest, type AppConfig } from '@/lib/api';
+import { fetchConfig, updateConfig, type AppConfig } from '@/lib/api';
 
 export default function OperationsPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [saving, setSaving] = useState(false);
-  const [testType, setTestType] = useState('segfault');
-  const [customLog, setCustomLog] = useState('');
-  const [testResult, setTestResult] = useState<string | null>(null);
-  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     fetchConfig().then(setConfig).catch(console.error);
@@ -24,15 +20,7 @@ export default function OperationsPage() {
     setSaving(false);
   };
 
-  const handleTest = async () => {
-    setTesting(true);
-    setTestResult(null);
-    try {
-      const result = await injectTest(testType, customLog || undefined);
-      setTestResult(JSON.stringify(result, null, 2));
-    } catch (e) { setTestResult(`Error: ${e}`); }
-    setTesting(false);
-  };
+
 
   if (!config) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading...</div>;
 
@@ -122,35 +110,24 @@ export default function OperationsPage() {
           </p>
         </div>
 
-        {/* Test Injection */}
+        {/* OCI Resource Orchestration */}
         <div className="glass-card">
-          <h2 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '16px' }}>🧪 Test Injection</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <h2 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '16px', color: 'var(--accent-cyan)' }}>☁️ OCI Resource Orchestration</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Error Type</label>
-              <select className="select" style={{ width: '100%' }} value={testType} onChange={e => setTestType(e.target.value)}>
-                <option value="segfault">Segmentation Fault (AH00052)</option>
-                <option value="permission">Permission Denied (AH00035)</option>
-                <option value="timeout">Backend Timeout (AH01114)</option>
-                <option value="ssl">SSL Error (AH02032)</option>
-                <option value="custom">Custom Log Entry</option>
-              </select>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Training Compartment OCID</label>
+              <input className="input" placeholder="ocid1.compartment.oc1..xxxx" />
             </div>
-            {testType === 'custom' && (
-              <textarea className="input" rows={3} placeholder="Paste custom log entry..."
-                value={customLog} onChange={e => setCustomLog(e.target.value)}
-                style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
-              />
-            )}
-            <button className="btn btn-primary" onClick={handleTest} disabled={testing}>
-              {testing ? '⏳ Processing...' : '🚀 Inject & Analyze'}
-            </button>
-            {testResult && (
-              <pre style={{
-                fontSize: '0.7rem', background: '#000', padding: '12px', borderRadius: '8px',
-                maxHeight: '200px', overflow: 'auto', whiteSpace: 'pre-wrap',
-              }}>{testResult}</pre>
-            )}
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Object Storage Namespace</label>
+              <input className="input" placeholder="Namespace-ID" />
+            </div>
+            <div style={{ padding: '12px', background: 'rgba(6, 182, 212, 0.05)', borderRadius: '8px', border: '1px solid rgba(6, 182, 212, 0.1)' }}>
+              <p style={{ fontSize: '0.7rem', color: 'var(--accent-cyan)' }}>
+                <strong>OCI SDK Status:</strong> Initialized (Ready for Job Orchestration)
+              </p>
+            </div>
+            <button className="btn btn-ghost" style={{ justifyContent: 'center' }}>Test OCI Connectivity</button>
           </div>
         </div>
       </div>

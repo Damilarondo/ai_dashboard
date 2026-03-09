@@ -68,6 +68,7 @@ export default function DocumentationPage() {
                 <div><Label>Time Detected</Label><Value>{new Date(selected.timestamp).toLocaleString()}</Value></div>
                 <div><Label>Server</Label><Value>{selected.server}</Value></div>
                 <div><Label>Error Code</Label><Value>{selected.error_code}</Value></div>
+                <div><Label>ML Root Cause</Label><Value>{selected.root_cause || 'Unknown'}</Value></div>
               </div>
               <Label>Raw Log Entry</Label>
               <pre style={{ fontSize: '0.75rem', background: '#000', padding: '10px', borderRadius: '6px', overflow: 'auto', whiteSpace: 'pre-wrap', marginTop: '4px' }}>

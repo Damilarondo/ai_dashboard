@@ -49,7 +49,8 @@ export default function IncidentsPage() {
               <th>Incident ID</th>
               <th>Time</th>
               <th>Server</th>
-              <th>Error</th>
+              <th>Root Cause</th>
+              <th>Error Code</th>
               <th>MTTR</th>
               <th>Status</th>
             </tr>
@@ -61,6 +62,11 @@ export default function IncidentsPage() {
                   <td style={{ fontFamily: 'monospace', color: 'var(--accent-cyan)', fontSize: '0.75rem' }}>{inc.id}</td>
                   <td style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{new Date(inc.timestamp).toLocaleString()}</td>
                   <td>{inc.server}</td>
+                  <td>
+                    <span className="badge badge-pending" style={{ background: 'rgba(255, 155, 113, 0.1)', color: '#FF9B71', border: '1px solid rgba(255, 155, 113, 0.2)' }}>
+                      {inc.root_cause || 'Analyzing...'}
+                    </span>
+                  </td>
                   <td style={{ fontFamily: 'monospace' }}>{inc.error_code}</td>
                   <td>{inc.mttr_seconds.toFixed(0)}s</td>
                   <td>

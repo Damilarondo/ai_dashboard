@@ -1,6 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { fetchMetrics, fetchIncidents, createWebSocket, type Metrics, type Incident } from '@/lib/api';
+import { 
+  fetchMetrics, fetchIncidents, fetchSystemMetrics, createWebSocket, 
+  API_URL, type Metrics, type Incident, type SystemMetrics 
+} from '@/lib/api';
+import { useInterface } from '@/components/InterfaceContext';
 
 interface LiveEvent {
   type: string;
@@ -8,19 +12,105 @@ interface LiveEvent {
   server?: string;
   timestamp?: string;
   preview?: string;
+  root_cause?: string;
   mttr?: number;
 }
 
+function MetricChart({ data, color, title }: { data: number[], color: string, title: string }) {
+  if (!data || data.length < 2) {
+    return (
+      <div style={{ marginTop: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>{title}</span>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>No data</span>
+        </div>
+        <div style={{ height: '40px', background: 'rgba(255,255,255,0.03)', borderRadius: '4px' }} />
+      </div>
+    );
+  }
+
+  const max = 100;
+  const width = 200;
+  const height = 40;
+  
+  // Use explicit Move and Line commands for safer SVG path data
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = height - (v / max) * height;
+    return `${i === 0 ? 'M' : 'L'} ${x},${y}`;
+  }).join(' ');
+
+  return (
+    <div style={{ marginTop: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>{title}</span>
+        <span style={{ fontSize: '0.65rem', fontWeight: 600, color }}>{data[data.length - 1]?.toFixed(1)}%</span>
+      </div>
+      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+        <path d={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+        <path d={`${points} V ${height} H 0 Z`} fill={color} fillOpacity="0.1" stroke="none" />
+      </svg>
+    </div>
+  );
+}
+
+function ProcessList({ processes }: { processes?: any[] }) {
+  if (!processes || processes.length === 0) return <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>No process data</div>;
+  return (
+    <div style={{ marginTop: '12px' }}>
+      <h3 style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>Top Processes (RAM)</h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {processes.map((p, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', padding: '4px 8px', background: 'rgba(255,255,255,0.02)', borderRadius: '4px' }}>
+            <span style={{ fontFamily: 'monospace' }}>{p.name} <span style={{ color: 'var(--text-secondary)', fontSize: '0.65rem' }}>({p.pid})</span></span>
+            <span style={{ fontWeight: 600 }}>{p.memory_percent.toFixed(1)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ServiceStatusGrid({ services }: { services?: Record<string, any> }) {
+  if (!services || Object.keys(services).length === 0) return <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>No services discovered</div>;
+  return (
+    <div style={{ marginTop: '12px' }}>
+      <h3 style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>Active Services</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+        {Object.entries(services).map(([name, info]) => (
+          <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: '4px', border: `1px solid ${info.status === 'active' || info.status === 'running' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'}` }}>
+            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: info.status === 'active' || info.status === 'running' ? 'var(--accent-green)' : 'var(--accent-red)' }} />
+            <div style={{ fontSize: '0.75rem', fontWeight: 500 }}>{name}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
+  const { mode } = useInterface();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [recentIncidents, setRecentIncidents] = useState<Incident[]>([]);
   const [events, setEvents] = useState<LiveEvent[]>([]);
   const [activeNode, setActiveNode] = useState<string>('');
+  const [prediction, setPrediction] = useState<{health_score?: number, predicted_failure?: string, status?: string, warnings?: string[]} | null>(null);
+  const [history, setHistory] = useState<{cpu: number[], mem: number[], disk: number[]}>({ cpu: [], mem: [], disk: [] });
+  const [latestMetric, setLatestMetric] = useState<SystemMetrics | null>(null);
 
   useEffect(() => {
     // Fetch initial data
     fetchMetrics().then(setMetrics).catch(console.error);
     fetchIncidents(1).then(data => setRecentIncidents(data.incidents.slice(0, 5))).catch(console.error);
+    fetchSystemMetrics(20).then(data => {
+      if (data.length > 0) setLatestMetric(data[0]);
+      const reversed = [...data].reverse();
+      setHistory({
+        cpu: reversed.map(m => m.cpu_percent),
+        mem: reversed.map(m => m.memory_percent),
+        disk: reversed.map(m => m.disk_percent)
+      });
+    }).catch(console.error);
 
     // WebSocket for live events
     const ws = createWebSocket();
@@ -28,26 +118,92 @@ export default function DashboardPage() {
       const data = JSON.parse(event.data);
       setEvents(prev => [data, ...prev].slice(0, 50));
 
-      // Update workflow visualization
       if (data.type === 'error_detected') setActiveNode('detect');
       else if (data.type === 'analyzing') setActiveNode('analyze');
       else if (data.type === 'analysis_complete' || data.type === 'pending_approval') setActiveNode('remediate');
       else if (data.type === 'resolved') setActiveNode('verify');
 
-      // Refresh metrics on new events
       fetchMetrics().then(setMetrics).catch(console.error);
       fetchIncidents(1).then(data => setRecentIncidents(data.incidents.slice(0, 5))).catch(console.error);
     };
 
-    // Refresh metrics every 30 seconds
     const interval = setInterval(() => {
       fetchMetrics().then(setMetrics).catch(console.error);
-    }, 30000);
+      fetchSystemMetrics(20).then(data => {
+        if (data.length > 0) setLatestMetric(data[0]);
+        const reversed = [...data].reverse();
+        setHistory({
+          cpu: reversed.map(m => m.cpu_percent),
+          mem: reversed.map(m => m.memory_percent),
+          disk: reversed.map(m => m.disk_percent)
+        });
+      });
+      fetch(`${API_URL}/metrics/predictions`)
+        .then(res => res.json())
+        .then(setPrediction)
+        .catch(console.error);
+    }, 10000); // 10s for more "live" feel
+
+    fetch(`${API_URL}/metrics/predictions`)
+       .then(res => res.json())
+       .then(setPrediction)
+       .catch(console.error);
 
     return () => { ws.close(); clearInterval(interval); };
   }, []);
 
   const workflowNodes = ['Detect', 'Analyze', 'Remediate', 'Verify'];
+
+  if (mode === 'expert') {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '20px', minHeight: '85vh' }}>
+        {/* Left: Terminal Console */}
+        <div style={{ background: '#0a0a0f', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #1f2937', paddingBottom: '12px' }}>
+            <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--accent-cyan)', fontFamily: 'monospace' }}>&gt; AIOps Terminal</h2>
+            <div className="pulse-dot" />
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+            {events.map((evt, i) => (
+              <div key={i} style={{ color: evt.type === 'error_detected' ? '#ef4444' : evt.type === 'resolved' ? '#10b981' : '#a855f7' }}>
+                <span style={{ color: '#6b7280' }}>[{new Date(evt.timestamp || Date.now()).toISOString()}]</span>{" "}
+                {evt.server ? `[${evt.server}]` : ''}{" "}
+                {evt.type.toUpperCase()}{" "}
+                {evt.root_cause ? `[RCA: ${evt.root_cause}]` : ''}
+              </div>
+            ))}
+            {events.length === 0 && <div style={{ color: '#6b7280' }}>Listening for live telemetry...</div>}
+          </div>
+        </div>
+
+        {/* Right: Expert Tooling */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="glass-card glow-cyan">
+            <h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '12px', fontFamily: 'monospace' }}>System Telemetry</h3>
+            <MetricChart data={history.cpu} color="var(--accent-cyan)" title="CPU Load" />
+            <MetricChart data={history.mem} color="var(--accent-yellow)" title="Memory Usage" />
+            <MetricChart data={history.disk} color="var(--accent-magenta)" title="Disk I/O" />
+            
+            <ProcessList processes={latestMetric?.processes} />
+          </div>
+
+          <div className="glass-card">
+            <ServiceStatusGrid services={latestMetric?.services} />
+          </div>
+          
+          <div className="glass-card">
+            <h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '12px', color: 'var(--accent-red)', fontFamily: 'monospace' }}>Network Override</h3>
+            <button className="btn" style={{ width: '100%', marginBottom: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+              Flush IP Tables
+            </button>
+            <button className="btn" style={{ width: '100%', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+              Force Agent Restart
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -66,7 +222,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '24px' }}>
         <div className="glass-card glow-cyan">
           <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Total Incidents</div>
           <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>{metrics?.total_incidents ?? '—'}</div>
@@ -83,10 +239,17 @@ export default function DashboardPage() {
           <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Active Agents</div>
           <div style={{ fontSize: '2rem', fontWeight: 700 }}>{metrics ? `${metrics.agents_online}/${metrics.agents_total || 1}` : '—'}</div>
         </div>
+        <div className="glass-card" style={{ border: prediction?.status === 'warning' ? '1px solid var(--accent-magenta)' : undefined }}>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>ML System Health (OCI)</div>
+          <div style={{ fontSize: '2rem', fontWeight: 700, color: prediction?.status === 'warning' ? 'var(--accent-magenta)' : 'var(--accent-green)' }}>
+             {prediction?.health_score !== undefined ? `${prediction.health_score}%` : 'Calc...'}
+          </div>
+          {prediction?.warnings && prediction.warnings.length > 0 && <div style={{ fontSize: '0.65rem', color: 'var(--accent-magenta)', marginTop: '4px' }}>{prediction.warnings[0]}</div>}
+        </div>
       </div>
 
       {/* Middle Row: Live Feed + Workflow */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px', marginBottom: '24px' }}>
         {/* Live Event Feed */}
         <div className="glass-card" style={{ maxHeight: '360px', overflow: 'hidden' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -111,7 +274,7 @@ export default function DashboardPage() {
                       {evt.type === 'failed' && '❌ Failed'}
                     </div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                      {evt.incident_id} {evt.server ? `• ${evt.server}` : ''} {evt.mttr ? `• ${evt.mttr.toFixed(0)}s` : ''}
+                      {evt.incident_id} {evt.server ? `• ${evt.server}` : ''} {evt.root_cause ? `• RCA: ${evt.root_cause}` : ''} {evt.mttr ? `• ${evt.mttr.toFixed(0)}s` : ''}
                     </div>
                   </div>
                 </div>
@@ -120,22 +283,36 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Agent Workflow Visualizer */}
+        {/* Service Health Card */}
+        <div className="glass-card" style={{ maxHeight: '360px', overflowY: 'auto' }}>
+           <h2 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '16px' }}>App Stack Health</h2>
+           <ServiceStatusGrid services={latestMetric?.services} />
+           <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', marginTop: '16px', paddingTop: '16px' }}>
+             <ProcessList processes={latestMetric?.processes} />
+           </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
         <div className="glass-card">
-          <h2 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '24px' }}>Agent Workflow</h2>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '40px 0' }}>
-            {workflowNodes.map((node, i) => (
-              <div key={node} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div className={`workflow-node ${activeNode === node.toLowerCase() ? 'active' : ''}`}>
-                  {node}
+          <MetricChart data={history.cpu} color="var(--accent-cyan)" title="CPU Utilization" />
+        </div>
+        <div className="glass-card">
+          <MetricChart data={history.mem} color="var(--accent-yellow)" title="Memory Utilization" />
+        </div>
+        <div className="glass-card">
+          <MetricChart data={history.disk} color="var(--accent-magenta)" title="Disk Storage" />
+        </div>
+        <div className="glass-card">
+           <h2 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '16px' }}>Agent Workflow</h2>
+           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+             {workflowNodes.map((node, i) => (
+                <div key={node} style={{ display: 'flex', alignItems: 'center', gap: '10px', opacity: activeNode === node.toLowerCase() ? 1 : 0.4 }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: activeNode === node.toLowerCase() ? 'var(--accent-cyan)' : 'var(--text-secondary)' }} />
+                  <div style={{ fontSize: '0.75rem', fontWeight: activeNode === node.toLowerCase() ? 600 : 400 }}>{node}</div>
                 </div>
-                {i < workflowNodes.length - 1 && <span className="workflow-arrow">→</span>}
-              </div>
-            ))}
-          </div>
-          <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
-            {activeNode ? `Currently: ${activeNode.charAt(0).toUpperCase() + activeNode.slice(1)}` : 'Idle — waiting for events'}
-          </div>
+             ))}
+           </div>
         </div>
       </div>
 
@@ -150,14 +327,15 @@ export default function DashboardPage() {
             <tr>
               <th>Time</th>
               <th>Server</th>
-              <th>Error</th>
+              <th>Root Cause</th>
+              <th>Error Code</th>
               <th>MTTR</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {recentIncidents.length === 0 ? (
-              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>No incidents yet</td></tr>
+              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>No incidents yet</td></tr>
             ) : (
               recentIncidents.map(inc => (
                 <tr key={inc.id} style={{ cursor: 'pointer' }} onClick={() => window.location.href = `/incidents/${inc.id}`}>
@@ -165,8 +343,13 @@ export default function DashboardPage() {
                     {new Date(inc.timestamp).toLocaleString()}
                   </td>
                   <td>{inc.server}</td>
+                  <td>
+                    <span className="badge badge-pending" style={{ background: 'rgba(255, 155, 113, 0.1)', color: '#FF9B71', border: '1px solid rgba(255, 155, 113, 0.2)' }}>
+                      {inc.root_cause || 'Analyzing...'}
+                    </span>
+                  </td>
                   <td style={{ fontFamily: 'monospace' }}>{inc.error_code}</td>
-                  <td>{inc.mttr_seconds.toFixed(0)}s</td>
+                  <td>{inc.mttr_seconds ? `${inc.mttr_seconds.toFixed(0)}s` : '—'}</td>
                   <td>
                     <span className={`badge badge-${inc.status === 'resolved' ? 'resolved' : inc.status === 'failed' ? 'failed' : 'pending'}`}>
                       {inc.status}

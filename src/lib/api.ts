@@ -1,10 +1,11 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://64.181.199.129:8000';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://localhost:8000';
 
 export interface Incident {
   id: string;
   timestamp: string;
   server: string;
   error_code: string;
+  root_cause: string | null;
   raw_logs: string;
   ai_analysis: string;
   remediation_commands: string;
@@ -12,6 +13,7 @@ export interface Incident {
   mttr_seconds: number;
   status: string;
   recommendations: string;
+  affected_services?: string;
 }
 
 export interface Metrics {
@@ -22,6 +24,16 @@ export interface Metrics {
   agents_online: number;
   agents_total: number;
   daily_trend: { day: string; count: number }[];
+}
+
+export interface SystemMetrics {
+  timestamp: string;
+  cpu_percent: number;
+  memory_percent: number;
+  disk_percent: number;
+  server: string;
+  processes?: any[];
+  services?: Record<string, any>;
 }
 
 export interface AppConfig {
@@ -78,6 +90,11 @@ export async function fetchAgents(): Promise<{ agents: Agent[] }> {
   return res.json();
 }
 
+export async function fetchSystemMetrics(limit = 50): Promise<SystemMetrics[]> {
+  const res = await fetch(`${API_URL}/metrics/system?limit=${limit}`, { cache: 'no-store' });
+  return res.json();
+}
+
 export async function approveIncident(id: string, action: string, editedCommands?: string) {
   const res = await fetch(`${API_URL}/incidents/${id}/approve`, {
     method: 'POST',
@@ -98,11 +115,13 @@ export async function injectTest(errorType: string, customLog?: string) {
 
 export function createWebSocket(): WebSocket {
   let wsUrl = API_URL;
-  if (wsUrl.startsWith('/')) {
+  if (wsUrl.startsWith('https://')) {
+    wsUrl = wsUrl.replace('https://', 'wss://');
+  } else if (wsUrl.startsWith('http://')) {
+    wsUrl = wsUrl.replace('http://', 'ws://');
+  } else if (wsUrl.startsWith('/')) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     wsUrl = `${protocol}//${window.location.host}${wsUrl}`;
-  } else {
-    wsUrl = wsUrl.replace('http', 'ws');
   }
   return new WebSocket(`${wsUrl}/ws`);
 }
