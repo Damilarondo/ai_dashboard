@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { 
-  fetchMetrics, fetchIncidents, fetchSystemMetrics, createWebSocket, 
+  fetchMetrics, fetchIncidents, fetchSystemMetrics, fetchPredictions, createWebSocket, 
   API_URL, type Metrics, type Incident, type SystemMetrics 
 } from '@/lib/api';
 import { useInterface } from '@/components/InterfaceContext';
@@ -60,10 +60,10 @@ function ProcessList({ processes }: { processes?: any[] }) {
     <div style={{ marginTop: '12px' }}>
       <h3 style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>Top Processes (RAM)</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {processes.map((p, i) => (
+        {Array.isArray(processes) && processes.map((p, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', padding: '4px 8px', background: 'rgba(255,255,255,0.02)', borderRadius: '4px' }}>
-            <span style={{ fontFamily: 'monospace' }}>{p.name} <span style={{ color: 'var(--text-secondary)', fontSize: '0.65rem' }}>({p.pid})</span></span>
-            <span style={{ fontWeight: 600 }}>{p.memory_percent.toFixed(1)}%</span>
+            <span style={{ fontFamily: 'monospace' }}>{p.name || 'Unknown'} <span style={{ color: 'var(--text-secondary)', fontSize: '0.65rem' }}>({p.pid || '?'})</span></span>
+            <span style={{ fontWeight: 600 }}>{(p.memory_percent || 0).toFixed(1)}%</span>
           </div>
         ))}
       </div>
@@ -77,9 +77,9 @@ function ServiceStatusGrid({ services }: { services?: Record<string, any> }) {
     <div style={{ marginTop: '12px' }}>
       <h3 style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>Active Services</h3>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-        {Object.entries(services).map(([name, info]) => (
-          <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: '4px', border: `1px solid ${info.status === 'active' || info.status === 'running' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'}` }}>
-            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: info.status === 'active' || info.status === 'running' ? 'var(--accent-green)' : 'var(--accent-red)' }} />
+        {services && typeof services === 'object' && Object.entries(services).map(([name, info]) => (
+          <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: '4px', border: `1px solid ${info && (info.status === 'active' || info.status === 'running') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'}` }}>
+            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: info && (info.status === 'active' || info.status === 'running') ? 'var(--accent-green)' : 'var(--accent-red)' }} />
             <div style={{ fontSize: '0.75rem', fontWeight: 500 }}>{name}</div>
           </div>
         ))}
@@ -145,20 +145,31 @@ export default function DashboardPage() {
 
   useEffect(() => {
     // Fetch initial data
-    fetchMetrics().then(setMetrics).catch(console.error);
-    fetchIncidents(1).then(data => setRecentIncidents(data.incidents.slice(0, 5))).catch(console.error);
+    fetchMetrics().then(data => {
+      if (data && !(data as any).detail) setMetrics(data);
+    }).catch(console.error);
+
+    fetchIncidents(1).then(data => {
+      if (data && Array.isArray(data.incidents)) {
+        setRecentIncidents(data.incidents.slice(0, 5));
+      }
+    }).catch(console.error);
+
     fetchSystemMetrics(20).then(data => {
-      if (data.length > 0) setLatestMetric(data[0]);
-      const reversed = [...data].reverse();
-      setHistory({
-        cpu: reversed.map(m => m.cpu_percent),
-        mem: reversed.map(m => m.memory_percent),
-        disk: reversed.map(m => m.disk_percent)
-      });
+      if (Array.isArray(data) && data.length > 0) {
+        setLatestMetric(data[0]);
+        const reversed = [...data].reverse();
+        setHistory({
+          cpu: reversed.map(m => m.cpu_percent || 0),
+          mem: reversed.map(m => m.memory_percent || 0),
+          disk: reversed.map(m => m.disk_percent || 0)
+        });
+      }
     }).catch(console.error);
 
     // WebSocket for live events
-    const ws = createWebSocket();
+    const token = localStorage.getItem('access_token');
+    const ws = createWebSocket(token);
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       setEvents(prev => [data, ...prev].slice(0, 50));
@@ -168,30 +179,43 @@ export default function DashboardPage() {
       else if (data.type === 'analysis_complete' || data.type === 'pending_approval') setActiveNode('remediate');
       else if (data.type === 'resolved') setActiveNode('verify');
 
-      fetchMetrics().then(setMetrics).catch(console.error);
-      fetchIncidents(1).then(data => setRecentIncidents(data.incidents.slice(0, 5))).catch(console.error);
+      fetchMetrics().then(data => {
+        if (data && !(data as any).detail) setMetrics(data);
+      }).catch(console.error);
+      fetchIncidents(1).then(data => {
+        if (data && Array.isArray(data.incidents)) {
+          setRecentIncidents(data.incidents.slice(0, 5));
+        }
+      }).catch(console.error);
     };
 
     const interval = setInterval(() => {
-      fetchMetrics().then(setMetrics).catch(console.error);
+      fetchMetrics().then(data => {
+        if (data && !(data as any).detail) setMetrics(data);
+      }).catch(console.error);
+
       fetchSystemMetrics(20).then(data => {
-        if (data.length > 0) setLatestMetric(data[0]);
-        const reversed = [...data].reverse();
-        setHistory({
-          cpu: reversed.map(m => m.cpu_percent),
-          mem: reversed.map(m => m.memory_percent),
-          disk: reversed.map(m => m.disk_percent)
-        });
+        if (Array.isArray(data) && data.length > 0) {
+          setLatestMetric(data[0]);
+          const reversed = [...data].reverse();
+          setHistory({
+            cpu: reversed.map(m => m.cpu_percent || 0),
+            mem: reversed.map(m => m.memory_percent || 0),
+            disk: reversed.map(m => m.disk_percent || 0)
+          });
+        }
       });
-      fetch(`${API_URL}/metrics/predictions`)
-        .then(res => res.json())
-        .then(setPrediction)
+      fetchPredictions()
+        .then(data => {
+          if (data && !data.detail) {
+             setPrediction(data);
+          }
+        })
         .catch(console.error);
     }, 10000); // 10s for more "live" feel
 
-    fetch(`${API_URL}/metrics/predictions`)
-       .then(res => res.json())
-       .then(setPrediction)
+    fetchPredictions()
+       .then(data => { if (data && !data.detail) setPrediction(data); })
        .catch(console.error);
 
     return () => { ws.close(); clearInterval(interval); };
@@ -296,7 +320,7 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div className="pulse-dot" />
           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            {new Date().toLocaleTimeString()}
+            System Live
           </span>
         </div>
       </div>
@@ -333,12 +357,12 @@ export default function DashboardPage() {
             <div className="pulse-dot" />
           </div>
           <div style={{ overflowY: 'auto', maxHeight: '290px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {events.length === 0 ? (
+            {(!events || events.length === 0) ? (
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center', padding: '40px 0' }}>
                 Waiting for events...
               </p>
             ) : (
-              events.map((evt, i) => (
+              Array.isArray(events) && events.map((evt, i) => (
                 <div key={i} className={`feed-item ${evt.type === 'error_detected' ? 'error' : evt.type === 'analyzing' ? 'analyzing' : 'resolved'}`}>
                   <div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>
@@ -410,10 +434,10 @@ export default function DashboardPage() {
             </tr>
           </thead>
           <tbody>
-            {recentIncidents.length === 0 ? (
+            {(!recentIncidents || recentIncidents.length === 0) ? (
               <tr><td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>No incidents yet</td></tr>
             ) : (
-              recentIncidents.map(inc => (
+              Array.isArray(recentIncidents) && recentIncidents.map(inc => (
                 <tr key={inc.id} style={{ cursor: 'pointer' }} onClick={() => window.location.href = `/incidents/${inc.id}`}>
                   <td style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.75rem' }}>
                     {new Date(inc.timestamp).toLocaleString()}

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '@/components/AuthContext';
 import { API_URL } from '@/lib/api';
 
@@ -16,21 +16,36 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      if (!crypto || !crypto.subtle) {
+        throw new Error('Crypto API not available. Please ensure you are using a secure context (HTTPS).');
+      }
+
+      // Hash password before sending, matching what install.sh stores
+      const encoder = new TextEncoder();
+      const hashData = encoder.encode(password);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', hashData);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const passwordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
       const res = await fetch(`${API_URL}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password: passwordHash })
       });
 
       if (!res.ok) {
-        throw new Error('Invalid username or password');
+        const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }));
+        const errorMessage = typeof errorData.detail === 'string' 
+          ? errorData.detail 
+          : JSON.stringify(errorData.detail);
+        throw new Error(errorMessage || 'Invalid username or password');
       }
 
-      const data = await res.json();
-      login(data.access_token, {
+      const loginData = await res.json();
+      login(loginData.access_token, {
         username,
-        tenant_id: data.tenant_id,
-        role: data.role
+        tenant_id: loginData.tenant_id,
+        role: loginData.role
       });
     } catch (err: any) {
       setError(err.message || 'Failed to login');
