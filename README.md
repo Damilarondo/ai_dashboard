@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Dashboard — Admin Monitoring Console
 
-## Getting Started
+A real-time **Next.js** dashboard for the central administrator. Provides full visibility into the AI troubleshooting system: live incident feeds, system telemetry charts, ML-driven health scores, agent management, and operational controls.
 
-First, run the development server:
+> **Part of the [Web Server Troubleshooting Agent](https://github.com/Damilarondo/web-server-troubleshooting-agent) system.**
+
+---
+
+## Features
+
+| Feature | Description |
+|---|---|
+| **Live Event Feed** | Real-time WebSocket stream of incident lifecycle events (detected → analyzing → remediated → resolved) |
+| **Health Score Gauge** | Composite stability index combining service uptime, resource pressure, unresolved incidents, and ML anomaly predictions |
+| **System Telemetry** | SVG sparkline charts for CPU, memory, and disk utilization, updated every 10 seconds |
+| **Top Processes** | Live list of the top 5 RAM-consuming processes on monitored servers |
+| **Service Status Grid** | At-a-glance view of all discovered services and their running state |
+| **Incident Management** | Paginated, filterable, and searchable incident table with full detail views (logs, AI analysis, remediation commands, MTTR) |
+| **Agent Management** | View registered agents, their heartbeat status, IP addresses, and OS details |
+| **Operations Centre** | Configure the AI model (temperature, max tokens), remediation mode (full-auto / semi-auto / manual), and system prompt |
+| **Expert Mode** | Toggle to a terminal-style console view for advanced users |
+| **JWT Authentication** | Login with client-side password hashing (SHA-256), automatic session invalidation on 401 |
+
+---
+
+## Pages
+
+| Route | Description |
+|---|---|
+| `/` | Dashboard — KPIs, live feed, telemetry charts, health gauge |
+| `/login` | Authentication page |
+| `/incidents` | Paginated incident list with search and status filters |
+| `/incidents/[id]` | Incident detail view (logs, analysis, remediation, workflow state) |
+| `/agents` | Registered agent list with heartbeat and status |
+| `/operations` | System configuration (model, mode, prompt) |
+| `/documentation` | In-app documentation / reference |
+
+---
+
+## Tech Stack
+
+- **Next.js 16** (App Router, React 19)
+- **TypeScript**
+- **Tailwind CSS 4**
+- **WebSocket** (for real-time events)
+
+---
+
+## Prerequisites
+
+- **Node.js 18+** and **npm**
+- A running [AI Control Plane](https://github.com/Damilarondo/ai_control_plane) backend
+
+---
+
+## Setup
 
 ```bash
+# Clone the repo
+git clone https://github.com/Damilarondo/ai_dashboard.git
+cd ai_dashboard
+
+# Install dependencies
+npm install
+
+# Set the API URL (defaults to http://localhost:8000)
+export NEXT_PUBLIC_API_URL=https://<control-plane-host>
+
+# Start the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The dashboard is available at `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Production Build
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+npm run start
+```
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Environment Variables
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variable | Description | Default |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | Base URL of the AI Control Plane API | `http://localhost:8000` |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project is part of a Final Year Project at the University of Lagos.
