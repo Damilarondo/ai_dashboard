@@ -22,6 +22,7 @@ export interface Incident {
   status: string;
   recommendations: string;
   affected_services?: string;
+  workflow_state?: string;
 }
 
 export interface Metrics {

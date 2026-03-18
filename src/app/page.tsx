@@ -333,7 +333,7 @@ export default function DashboardPage() {
         </div>
         <div className="glass-card">
           <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Mean Time to Repair</div>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--accent-green)' }}>{metrics ? `${metrics.avg_mttr_seconds.toFixed(0)}s` : '—'}</div>
+          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--accent-green)' }}>{metrics && metrics.avg_mttr_seconds > 0 ? `${metrics.avg_mttr_seconds.toFixed(0)}s` : '—'}</div>
         </div>
         <div className="glass-card">
           <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Success Rate</div>
@@ -449,7 +449,7 @@ export default function DashboardPage() {
                     </span>
                   </td>
                   <td style={{ fontFamily: 'monospace' }}>{inc.error_code}</td>
-                  <td>{inc.mttr_seconds ? `${inc.mttr_seconds.toFixed(0)}s` : '—'}</td>
+                  <td>{inc.status === 'resolved' && inc.mttr_seconds ? `${inc.mttr_seconds.toFixed(0)}s` : '—'}</td>
                   <td>
                     <span className={`badge badge-${inc.status === 'resolved' ? 'resolved' : inc.status === 'failed' ? 'failed' : 'pending'}`}>
                       {inc.status}
